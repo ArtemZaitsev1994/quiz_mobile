@@ -1,0 +1,39 @@
+
+
+<Container>:
+
+    start_game_btn: start_game_btn
+    add_question_btn: add_question_btn
+    
+    BoxLayout:
+        padding: 5
+        orientation: "vertical"
+
+        Button:
+            id: start_game_btn
+            text: 'Начать игру'
+
+            on_press:
+                root.start_game()
+
+
+        Button:
+            id: add_question_btn
+            text: 'Добавить вопрос'
+
+
+
+
+<GameScreen>:
+    questions: questions
+    BoxLayout:
+        orientation: "vertical"
+
+        RecycleView:
+            id: questions
+            viewclass: 'Label'
+            RecycleBoxLayout:
+                default_size: None, dp(56)
+                default_size_hint: 1, None
+                size_hint_y: None
+                orientation: 'vertical'
