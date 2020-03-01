@@ -33,6 +33,7 @@ Builder.load_string('''
 
 <GameScreen>:
     questions: questions
+    warning_label: warning_label
     BoxLayout:
         orientation: 'vertical'
         RecycleView:
@@ -44,6 +45,14 @@ Builder.load_string('''
                 size_hint_y: None
                 height: self.minimum_height
                 orientation: 'vertical'
+        Label:
+            id: warning_label
+            text: ""
+        Button:
+            id: back
+            text: "Назад"
+            on_press:
+                root._going_back()
 
 
 <Question>:
@@ -51,6 +60,7 @@ Builder.load_string('''
     complexity_label: complexity_label
     text_label: text_label
     answer_label: answer_label
+    back_btn: back
     BoxLayout:
         orientation: 'vertical'
         Label:
@@ -61,12 +71,22 @@ Builder.load_string('''
             id: text_label
         Label:
             id: answer_label
+        Button:
+            id: back
+            text: "Назад"
+            on_press:
+                root._going_back()
 ''')
 
 
-DOMAIN = 'http://127.0.0.1:8080'
+MAIN_MENU = 'main_menu'
+GAME = 'game'
+QUESTION = 'question'
+
+DOMAIN = 'http://192.168.0.7'
 API = {
     'start_game': urllib.request.urljoin(DOMAIN, 'game_mobile'),
+    'get_question': urllib.request.urljoin(DOMAIN, 'questions'),
 }
 
 
@@ -83,23 +103,70 @@ class Container(Screen):
 
 class GameScreen(Screen):
 
+    def __init__(self, **kw):
+        super(GameScreen, self).__init__(**kw)
+        self.q_ids = []
+
+    def show_q(self, _id):
+        def show():
+            change_screen(_id)
+        return show
+
     def on_enter(self, **kw):
-        try:
-            request = urllib.request.urlopen(API['start_game'])
-        except (urllib.error.HTTPError, urllib.error.URLError):
-            pass
-        else:
-            qs = json.loads(request.read().decode("utf-8"))
-            self.questions.data = []
-            for q in qs:
+        app = App.get_running_app()
+
+        if app.state == MAIN_MENU:
+            app.state = GAME
+            self.warning_label.text = ''
+            try:
+                request = urllib.request.urlopen(API['start_game'])
+            except (urllib.error.HTTPError, urllib.error.URLError):
+                pass
+            else:
+                qs = json.loads(request.read().decode("utf-8"))
+                self.questions.data = []
+                for q in qs:
+                    q_btn = {
+                        'text': q['text'],
+                        'valign': 'top',
+                        'on_press': self.show_q(q['_id']),
+                        'q_id': q['_id']
+                    }
+                    sm.add_widget(Question(q))
+                    self.questions.data.append(q_btn)
+                    self.q_ids.append(q['_id'])
+        elif app.state == QUESTION:
+            app.state = GAME
+            try:
+                new_params = '.'.join(self.q_ids)
+                request = urllib.request.urlopen(f'{API["get_question"]}?ids={new_params}')
+            except (urllib.error.HTTPError, urllib.error.URLError):
+                pass
+            else:
+                question = json.loads(request.read().decode("utf-8"))
+
+                self.questions.data = [x for x in self.questions.data if x['q_id'] != app.current_q]
+
+                if question.get('warning'):
+                    self.warning_label.text = 'У нас закончились вопросы, но вы можете прислать свои, для других пользователей!'
+                    return
+
+                sm.add_widget(Question(question))
+                _id = question['_id']
                 q_btn = {
-                    'text': q['text'],
+                    'text': question['text'],   
                     'valign': 'top',
-                    'on_press': lambda: change_screen(q['_id']),
-                    'q_id': q['_id']
+                    'on_press': lambda: change_screen(_id),
+                    'q_id': question['_id']
                 }
-                sm.add_widget(Question(q))
                 self.questions.data.append(q_btn)
+                self.q_ids.append(question['_id'])
+
+    def _going_back(self):
+
+        app = App.get_running_app()
+        app.state = MAIN_MENU
+        change_screen(MAIN_MENU)
 
 
 class Question(Screen):
@@ -109,17 +176,25 @@ class Question(Screen):
         self.name = question['_id']
 
     def on_enter(self):
+
+        app = App.get_running_app()
+        app.current_q = self.name
+        app.state = QUESTION
+        
         self.text_label.text = f'Вопрос: {self.q["text"]}'
         self.complexity_label.text = f'Сложность: {self.q["complexity"] * "*"}'
         self.category_label.text = f'Категория: {self.q["category"]}'
         self.answer_label.text = f'Ответ: {self.q["answer"]}'
 
+    def _going_back(self):
+        change_screen(GAME)
 
 
 sm = ScreenManager()
 sm.add_widget(Container(name='main_menu'))
 sm.add_widget(GameScreen(name='game'))
 sm.current = 'main_menu'
+
 
 def change_screen(screen):
     sm.current = screen
@@ -128,6 +203,8 @@ def change_screen(screen):
 class GameApp(App):
 
     def build(self):
+        self.current_q = ''
+        self.state = MAIN_MENU
         return sm
 
 GameApp().run()
