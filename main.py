@@ -10,7 +10,6 @@ from kivy.lang import Builder
 
 Builder.load_string('''
 
-
 <Container>:
 
     start_game_btn: start_game_btn
@@ -27,12 +26,9 @@ Builder.load_string('''
             on_press:
                 root.start_game()
 
-
         Button:
             id: add_question_btn
             text: 'Добавить вопрос'
-
-
 
 
 <GameScreen>:
@@ -48,6 +44,23 @@ Builder.load_string('''
                 size_hint_y: None
                 height: self.minimum_height
                 orientation: 'vertical'
+
+
+<Question>:
+    category_label: category_label
+    complexity_label: complexity_label
+    text_label: text_label
+    answer_label: answer_label
+    BoxLayout:
+        orientation: 'vertical'
+        Label:
+            id: category_label
+        Label:
+            id: complexity_label
+        Label:
+            id: text_label
+        Label:
+            id: answer_label
 ''')
 
 
@@ -59,7 +72,7 @@ API = {
 
 class Container(Screen):
     def __init__(self, **kw):
-            super(Container, self).__init__(**kw)
+        super(Container, self).__init__(**kw)
 
     def start_game(self):
         change_screen('game')
@@ -73,17 +86,34 @@ class GameScreen(Screen):
     def on_enter(self, **kw):
         try:
             request = urllib.request.urlopen(API['start_game'])
-        except urllib.error.HTTPError:
+        except (urllib.error.HTTPError, urllib.error.URLError):
             pass
         else:
             qs = json.loads(request.read().decode("utf-8"))
+            self.questions.data = []
             for q in qs:
-                q_btn = Button(
-                    text=q['text'],
-                    on_press=lambda x: change_screen('main_menu'),
-                    size_hint_y=None
-                )
-                self.questions.data.append({'text': q['text'], 'valign': 'top'})
+                q_btn = {
+                    'text': q['text'],
+                    'valign': 'top',
+                    'on_press': lambda: change_screen(q['_id']),
+                    'q_id': q['_id']
+                }
+                sm.add_widget(Question(q))
+                self.questions.data.append(q_btn)
+
+
+class Question(Screen):
+    def __init__(self, question):
+        super(Question, self).__init__()
+        self.q = question
+        self.name = question['_id']
+
+    def on_enter(self):
+        self.text_label.text = f'Вопрос: {self.q["text"]}'
+        self.complexity_label.text = f'Сложность: {self.q["complexity"] * "*"}'
+        self.category_label.text = f'Категория: {self.q["category"]}'
+        self.answer_label.text = f'Ответ: {self.q["answer"]}'
+
 
 
 sm = ScreenManager()
